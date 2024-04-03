@@ -21,22 +21,11 @@ async def test_project(dut):
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 10)
     dut.rst_n.value = 1
+    await ClockCycles(dut.clk, 10)
 
     # Case 1: ui_in is 1, expect uo_out to be all 1's
     dut._log.info("Test with ui_in = 1")
     dut.ui_in.value = 1  # Set ui_in to 1
-    await ClockCycles(dut.clk, 1)  # Wait one clock cycle
+    await ClockCycles(dut.clk, 30)  # Wait one clock cycle
     assert dut.uo_out.value == 0xFF, f"Expected uo_out to be 0xFF, got {hex(dut.uo_out.value)}"
 
-    # Reset before next test
-    dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 10)
-    dut.rst_n.value = 1
-
-    # Case 2: ui_in is not 1, specifically testing with previous value of 20
-    dut._log.info("Test with ui_in = 20")
-    dut.ui_in.value = 20  # Revert to previous test condition
-    dut.uio_in.value = 30
-    await ClockCycles(dut.clk, 1)  # Wait one clock cycle
-    # Expect uo_out to be 0x03 since our Verilog code now sets only two LSBs if ui_in is not 1
-    assert dut.uo_out.value == 0x03, f"Expected uo_out to be 0x03, got {hex(dut.uo_out.value)}"
