@@ -33,8 +33,8 @@ module tt_um_example (
       .block_b2(block_b2),
       .block_b3(block_b3),
       .block_b4(block_b4),
-      .clk(CLK),
-      .rst(RESET),
+      .clk(clk),
+      .rst(rst_n),
       .start(start),
       .load(load),
       .block_multiply_done(block_multiply_done),
@@ -105,13 +105,13 @@ always @(*) begin
           end else begin
               next_mul_state = START;
           end
-          uo_out = 8'hFF;
+          
           // Other START state logic
       end
       DONE_MUL: begin
         $display("done multiplying");
           // DONE_MUL state logic
-          
+          uo_out = 8'hFF;
           next_mul_state = IDLE_MUL;
       end
       default: next_mul_state = IDLE_MUL;
