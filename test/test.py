@@ -3,7 +3,7 @@
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge, Timer
+from cocotb.triggers import ClockCycles, RisingEdge, Timer, FallingEdge, Edge
 from helper import float16_to_8bit_bytes, binary_strings_to_float16
 import numpy as np
 
@@ -16,8 +16,8 @@ async def test_project(dut):
     clock_period = 83.33
     clock = Clock(dut.clk, clock_period, units="ns")
     cocotb.start_soon(clock.start())
-    # cocotb.start_soon(monitor_rxd_ack(dut))
-    # cocotb.start_soon(monitor_uo_out(dut))
+    cocotb.start_soon(monitor_tx(dut))
+
 
     # Reset
     dut._log.info("Reset")
@@ -55,8 +55,10 @@ async def test_project(dut):
             await ClockCycles(dut.clk, 1)
     
     await send_byte(dut, '11111111')
+    dut.ui_in[1].value = 1
     print("Sent all float16 values")
     print("uo_out:", dut.uo_out.value)
+    await Timer(100000, units='us')
 
 
 async def send_byte(dut, byte):
@@ -75,12 +77,16 @@ async def send_byte(dut, byte):
     print("Sending stop bit")
     await Timer(104, units='us')  # Delay for 1 bit time at 9600 baud
 
-# async def monitor_rxd_ack(dut):
-#     while True:
-#         await RisingEdge(dut.rx_ack)
-#         print("rx_ack is high")
-
-# async def monitor_uo_out(dut):
-#     while True:
-#         await RisingEdge(dut.uo_out)
-#         print("uo_out is high")
+async def monitor_tx(dut):
+    while True:
+        await Edge(dut.uo_out)
+        print("Start bit detected")
+        data = ""
+        for _ in range(8):
+            await Timer(104, units='us')  # Wait for 1 bit time at 9600 baud
+            data = str(dut.uo_out[1].value.integer) + data
+            print(f"Received bit: {dut.uo_out[1].value.integer}")
+        await Timer(104, units='us')  # Wait for stop bit
+        stop_bit = dut.uo_out[1].value.integer
+        print(f"Received stop bit: {stop_bit}")
+        dut._log.info(f"Received byte from TX: {data}")
