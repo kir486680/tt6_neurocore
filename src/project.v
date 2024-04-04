@@ -52,36 +52,38 @@ module tt_um_example (
 
 
      // Update current_mul_state and send_data in a single always block
-  always @(posedge clk) begin
+  always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-       current_mul_state <= IDLE_MUL;
-       block_a1 <= 16'b0011110000000000;
-       block_a2 <= 16'b0011110000000000;
-       block_a3 <= 16'b0011110000000000;
-       block_a4 <= 16'b0011110000000000;
-       block_b1 <= 16'b0011110000000000;
-       block_b2 <= 16'b0011110000000000;
-       block_b3 <= 16'b0011110000000000;
-       block_b4 <= 16'b0011110000000000;
-       send_data <= 0;
+        current_mul_state <= IDLE_MUL;
+        send_data <= 0;
+        block_a1 <= `DATA_W-1'd0;
+           block_a2 <= `DATA_W'd0;
+           block_a3 <= `DATA_W'd0;
+           block_a4 <= `DATA_W'd0;
+           block_b1 <= `DATA_W'd0;
+           block_b2 <= `DATA_W'd0;
+           block_b3 <= `DATA_W'd0;
+           block_b4 <= `DATA_W'd0;
+           
+
     end else begin
         current_mul_state <= next_mul_state;
+        // Update send_data only in the sequential block
         if (current_mul_state == START && block_multiply_done) begin
-          send_data <= 1;
-      end else if (current_mul_state == DONE_MUL) begin
-          send_data <= 0;
-      end
+            send_data <= 1;
+        end else if (current_mul_state == DONE_MUL) begin
+            send_data <= 0;
+        end
     end
 end
 
-     // Calculate next state and send_data based on current state and inputs
 always @(*) begin
   if (!rst_n) begin
-      start = 0;
-
-      load = 0;
+      start = 1'b0;
+      load = 1'b0;
       next_mul_state = IDLE_MUL;
   end
+  
   case (current_mul_state)
       IDLE_MUL: begin
           if (state_receive == DONE_RECEIVE) begin
@@ -89,7 +91,6 @@ always @(*) begin
           end else begin
               next_mul_state = IDLE_MUL;
           end
-          
       end
       LOAD: begin
           next_mul_state = START;
@@ -100,12 +101,10 @@ always @(*) begin
           load = 0;
           start = 1;
           if (block_multiply_done) begin
-            
               next_mul_state = DONE_MUL;
           end else begin
               next_mul_state = START;
           end
-          
           // Other START state logic
       end
       DONE_MUL: begin
