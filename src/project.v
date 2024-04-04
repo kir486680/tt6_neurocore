@@ -56,14 +56,6 @@ module tt_um_example (
     if (!rst_n) begin
         current_mul_state <= IDLE_MUL;
         send_data <= 0;
-        block_a1 <= `DATA_W-1'd0;
-           block_a2 <= `DATA_W'd0;
-           block_a3 <= `DATA_W'd0;
-           block_a4 <= `DATA_W'd0;
-           block_b1 <= `DATA_W'd0;
-           block_b2 <= `DATA_W'd0;
-           block_b3 <= `DATA_W'd0;
-           block_b4 <= `DATA_W'd0;
            
 
     end else begin
