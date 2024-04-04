@@ -48,7 +48,7 @@ module tt_um_example (
   localparam IDLE_MUL = 0, LOAD = 1, START = 2, DONE_MUL = 3;
   reg [2:0] current_mul_state = IDLE_MUL;
   reg [2:0] next_mul_state = IDLE_MUL;
-
+  reg send_data;
 
 
      // Update current_mul_state and send_data in a single always block
@@ -63,10 +63,14 @@ module tt_um_example (
        block_b2 <= 16'b0011110000000000;
        block_b3 <= 16'b0011110000000000;
        block_b4 <= 16'b0011110000000000;
-           
+       send_data <= 0;
     end else begin
         current_mul_state <= next_mul_state;
-        $display("current_mul_state: %d", current_mul_state);
+        if (current_mul_state == START && block_multiply_done) begin
+          send_data <= 1;
+      end else if (current_mul_state == DONE_MUL) begin
+          send_data <= 0;
+      end
     end
 end
 
@@ -74,15 +78,13 @@ end
 always @(*) begin
   if (!rst_n) begin
       start = 0;
-      uo_out = 0;
+
       load = 0;
       next_mul_state = IDLE_MUL;
   end
   case (current_mul_state)
       IDLE_MUL: begin
-          if (ui_in == 8'h01) begin
-              //uo_out = 8'hFF;
-             $display("input recognized");
+          if (state_receive == DONE_RECEIVE) begin
               next_mul_state = LOAD;
           end else begin
               next_mul_state = IDLE_MUL;
@@ -93,12 +95,10 @@ always @(*) begin
           next_mul_state = START;
           load = 1;
           start = 0;
-          $display("loading");
       end
       START: begin
           load = 0;
           start = 1;
-          $display("starting");
           if (block_multiply_done) begin
             
               next_mul_state = DONE_MUL;
@@ -109,9 +109,7 @@ always @(*) begin
           // Other START state logic
       end
       DONE_MUL: begin
-        $display("done multiplying");
           // DONE_MUL state logic
-          uo_out = 8'hFF;
           next_mul_state = IDLE_MUL;
       end
       default: next_mul_state = IDLE_MUL;
@@ -120,9 +118,258 @@ end
 
 
 
+// UART stuff 
+wire [7:0] rx_data;
+reg [7:0] tx_data;
+wire rx_ready;
+wire rx_ack;
+assign uo_out[0] = block_multiply_done;
+wire       tx_ready;
+wire       tx_ack;
+UART #(
+    .FREQ(12_000_000),
+    .BAUD(9600)
+) uart (
+    .reset(rst_n),
+    .clk(clk),
+    .rx_i(ui_in[0]),
+    .rx_data_o(rx_data),
+    .rx_ready_o(rx_ready),
+    .rx_ack_i(rx_ack),
+    .rx_error_o(rx_error),
+    .tx_o(TXD),
+    .tx_data_i(tx_data),
+    .tx_ready_i(tx_ready),
+    .tx_ack_o(tx_ack)
+);
+
+reg [7:0] received_data;
+reg data_received;
+reg data_processed;
+
+localparam IDLE = 0, RECEIVE_BR1_HIGH = 1, RECEIVE_BR1_LOW = 2, 
+RECEIVE_BR2_HIGH = 3, RECEIVE_BR2_LOW = 4, 
+RECEIVE_BR3_HIGH = 5, RECEIVE_BR3_LOW = 6,
+RECEIVE_BR4_HIGH = 7, RECEIVE_BR4_LOW = 8, 
+RECEIVE_BR5_HIGH = 9, RECEIVE_BR5_LOW = 10,
+RECEIVE_BR6_HIGH = 11, RECEIVE_BR6_LOW = 12,
+RECEIVE_BR7_HIGH = 13, RECEIVE_BR7_LOW = 14,
+RECEIVE_BR8_HIGH = 15, RECEIVE_BR8_LOW = 16,
+DONE_RECEIVE = 17;
+//now need to keep track of the state of the data that is being received
+reg [5:0] state_receive = IDLE;
+
+always @(posedge clk) begin
+    if (!rst_n) begin
+        data_received <= 1'b0;
+        data_processed <= 1'b0;
+        received_data <= 8'h00;
+        state_receive <= IDLE;
+
+    end
+    else begin
+    if (rx_ready && !data_received) begin
+        // New data is available and not yet processed
+        received_data <= rx_data; // Store the incoming data
+        data_received <= 1'b1;    // Set flag to indicate data is ready to be processed
+    // state machine to receive the data
+        case (state_receive)
+        IDLE: begin
+            
+            if (rx_data == 8'b11111110) begin
+                data_processed <= 1'b1;
+                state_receive <= RECEIVE_BR1_HIGH;
+                $display("received the start seq");
+            end
+        end
+        RECEIVE_BR1_HIGH: begin
+            block_a1[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR1_LOW;
+        end
+        RECEIVE_BR1_LOW: begin
+            block_a1[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR2_HIGH;
+        end
+        RECEIVE_BR2_HIGH: begin
+            block_a2[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR2_LOW;
+        end
+        RECEIVE_BR2_LOW: begin
+            block_a2[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR3_HIGH;
+        end
+        RECEIVE_BR3_HIGH: begin
+            block_a3[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR3_LOW;
+        end
+        RECEIVE_BR3_LOW: begin
+            block_a3[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR4_HIGH;
+        end
+        RECEIVE_BR4_HIGH: begin
+            block_a4[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR4_LOW;
+        end
+        RECEIVE_BR4_LOW: begin
+            block_a4[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR5_HIGH;
+        end
+        RECEIVE_BR5_HIGH: begin
+            block_b1[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR5_LOW;
+        end
+        RECEIVE_BR5_LOW: begin
+            block_b1[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR6_HIGH;
+        end
+        RECEIVE_BR6_HIGH: begin
+            block_b2[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR6_LOW;
+        end
+        RECEIVE_BR6_LOW: begin
+            block_b2[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR7_HIGH;
+        end
+        RECEIVE_BR7_HIGH: begin
+            block_b3[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR7_LOW;
+        end
+        RECEIVE_BR7_LOW: begin
+            block_b3[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR8_HIGH;
+        end
+        RECEIVE_BR8_HIGH: begin
+            block_b4[15:8] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= RECEIVE_BR8_LOW;
+        end
+        RECEIVE_BR8_LOW: begin
+            block_b4[7:0] <= rx_data;
+            data_processed <= 1'b1;
+            state_receive <= DONE_RECEIVE;
+            
+        end
+        DONE_RECEIVE: begin
+       
+            if (rx_data == 8'b11111111) begin
+                state_receive <= IDLE;
+                data_processed <= 1'b1;
+                $display("received the end seq");
+            end
+        end
+    endcase
+    end
+end
+    // Once data is processed, reset the flag
+    if (data_processed) begin // Assuming data_processed is set once you're done processing
+        data_received <= 1'b0;
+        data_processed <= 1'b0;
+    end
+end
+
+// Acknowledge reception to UART module
+assign rx_ack = rx_ready && !data_received;
+
+
+reg data_available;
+
+// Define states
+localparam IDLE_SEND = 0, SEND_BR1_HIGH = 1, SEND_BR1_LOW = 2, 
+SEND_BR2_HIGH = 3, SEND_BR2_LOW = 4, 
+SEND_BR3_HIGH = 5, SEND_BR3_LOW = 6,
+SEND_BR4_HIGH = 7, SEND_BR4_LOW = 8, DONE_SEND = 9;
+
+reg [3:0] send_state = IDLE_SEND;
+
+
+//Assign LEDS[3]  to 1 if the send_staet is IDLE_SEND
+always @(posedge clk) begin
+    if(!rst_n) begin
+        data_available <= 1'b0;
+        send_state <= IDLE_SEND;
+    end
+    else begin
+
+        
+
+
+    if(send_data) begin
+    if (!data_available && tx_ack && received_data == 8'b11111111) begin
+        // Load new data to send
+        data_available <= 1'b1;
+        
+        case (send_state)
+            IDLE_SEND: begin
+                tx_data <= 8'b11111110;
+                send_state <= SEND_BR1_HIGH;
+            end
+            SEND_BR1_HIGH: begin
+                
+                tx_data <= block_result1[15:8];
+                send_state <= SEND_BR1_LOW;
+            end
+            SEND_BR1_LOW: begin
+                tx_data <= block_result1[7:0];
+                send_state <= SEND_BR2_HIGH;
+            end
+            SEND_BR2_HIGH: begin
+                tx_data <= block_result2[15:8];
+                send_state <= SEND_BR2_LOW;
+            end
+            SEND_BR2_LOW: begin
+                tx_data <= block_result2[7:0];
+                send_state <= SEND_BR3_HIGH;
+            end
+            SEND_BR3_HIGH: begin
+                tx_data <= block_result3[15:8];
+                send_state <= SEND_BR3_LOW;
+            end
+            SEND_BR3_LOW: begin
+                tx_data <= block_result3[7:0];
+                send_state <= SEND_BR4_HIGH;
+            end
+            SEND_BR4_HIGH: begin
+                tx_data <= block_result4[15:8];
+                send_state <= SEND_BR4_LOW;
+            end
+            SEND_BR4_LOW: begin
+                tx_data <= block_result4[7:0];
+                send_state <= DONE_SEND;
+            end
+            DONE_SEND: begin
+                tx_data <= 8'b11111111;
+                send_state <= IDLE_SEND;
+            end
+        endcase
+
+    end
+    else if (tx_ready && data_available) begin
+        data_available <= 1'b0; // Reset to load next data chunk
+    end
+end
+end
+end
+
+assign tx_ready = data_available; // Only ready when new data is loaded
+
 
 
   // Keep other assignments as is
+  assign uo_out[7:1] = 0;
   assign uio_out = 0;
   assign uio_oe  = 0;
 
@@ -494,4 +741,277 @@ module fmul(
     assign overflow_mask = overflow ? 0 : {(`M_W){1'b1}};
 
     assign result = {sign, e_result, overflow_mask & M_result};
+endmodule
+
+
+
+
+/* 
+
+Receiver Half:
+
+input rx_i: This is the input signal for the receiver. It represents the incoming serial data line. The receiver samples this signal to receive data.
+output [7:0] rx_data_o: This is an 8-bit output signal that holds the received data byte. When a complete byte is received, rx_data_o is updated with the received data.
+output rx_ready_o: This is an output signal that indicates when a complete byte has been received and is ready to be read. It is asserted (goes high) when the receiver has successfully received a byte and is in the RX_FULL state.
+input rx_ack_i: This is an input signal used to acknowledge the receipt of the received data. When the receiver is in the RX_FULL state and rx_ack_i is asserted, the receiver transitions back to the RX_IDLE state, ready to receive the next byte.
+output rx_error_o: This is an output signal that indicates if an error occurred during the reception of a byte. It is asserted when the receiver is in the RX_ERROR state, which can happen if the stop bit is not detected correctly.
+
+Transmitter Half:
+
+output tx_o: This is the output signal for the transmitter. It represents the outgoing serial data line. The transmitter drives this signal to send data.
+input [7:0] tx_data_i: This is an 8-bit input signal that holds the data byte to be transmitted. When tx_ready_i is asserted, the transmitter latches the value of tx_data_i and starts the transmission process.
+input tx_ready_i: This is an input signal that indicates when a new byte is ready to be transmitted. When tx_ready_i is asserted and the transmitter is in the TX_IDLE state, the transmitter starts the transmission of the byte.
+output tx_ack_o: This is an output signal that acknowledges the transmitter is ready to accept a new byte for transmission. It is asserted when the transmitter is in the TX_IDLE state, indicating that it has completed the previous transmission and is ready for a new byte.
+These signals are triggered and updated based on the state machines and strobes in the UART module:
+
+The receiver state machine samples rx_i on the rising edge of rx_sampler_clk and transitions through the states (RX_IDLE, RX_START, RX_DATA, RX_STOP, RX_FULL, RX_ERROR) to receive a byte.
+The transmitter state machine updates tx_o on the rising edge of tx_sampler_clk and transitions through the states (TX_IDLE, TX_START, TX_DATA, TX_STOP0, TX_STOP1) to transmit a byte.
+The strobes (rx_strobe and tx_strobe) are generated based on the respective sampler clocks and are used to control the timing of the state transitions and data sampling/updating.
+*/
+
+
+module UART #(
+        parameter FREQ  = 1_000_000,
+        parameter BAUD  = 9600
+    ) (
+        input           reset,
+        input           clk,
+        // Receiver half
+        input           rx_i, //incoming serial daat line. Receiver samples this line at the middle of the bit period
+        output [7:0]    rx_data_o, //This is an 8-bit output signal that holds the received data byte. When a complete byte is received, rx_data_o is updated with the received data.
+        output          rx_ready_o,// This is an output signal that indicates when a complete byte has been received and is ready to be read. It is asserted (goes high) when the receiver has successfully received a byte and is in the RX_FULL state.
+        input           rx_ack_i, //This is an input signal used to acknowledge the receipt of the received data. When the receiver is in the RX_FULL state and rx_ack_i is asserted, the receiver transitions back to the RX_IDLE state, ready to receive the next byte.
+    //This is an output signal that indicates if an error occurred during the reception of a byte. It is asserted when the receiver is in the RX_ERROR state, which can happen if the stop bit is not detected correctly.
+
+        output          rx_error_o,
+        // Transmitter half
+        output          tx_o,
+        input  [7:0]    tx_data_i,
+        input           tx_ready_i,
+        output          tx_ack_o
+    );
+
+    // RX oversampler
+    reg        rx_sampler_reset = 1'b0;
+    wire       rx_sampler_clk;
+    ClockDiv #(
+        .FREQ_I(FREQ),
+        .FREQ_O(BAUD * 3),
+        .PHASE(1'b1),
+        .MAX_PPM(50_000)
+    ) rx_sampler_clk_div (
+        .reset(rx_sampler_reset),
+        .clk_i(clk),
+        .clk_o(rx_sampler_clk)
+    );
+
+    reg  [2:0] rx_sample  = 3'b000;
+    wire       rx_sample1 = (rx_sample == 3'b111 ||
+                             rx_sample == 3'b110 ||
+                             rx_sample == 3'b101 ||
+                             rx_sample == 3'b011);
+    always @(posedge rx_sampler_clk or negedge rx_sampler_reset)
+        if(!rx_sampler_reset)
+            rx_sample <= 3'b000;
+        else
+            rx_sample <= {rx_sample[1:0], rx_i};
+
+    (* fsm_encoding="one-hot" *)
+    reg  [1:0] rx_sampleno  = 2'd2;
+    wire       rx_samplerdy = (rx_sampleno == 2'd2);
+    always @(posedge rx_sampler_clk or negedge rx_sampler_reset)
+        if(!rx_sampler_reset)
+            rx_sampleno <= 2'd2;
+        else case(rx_sampleno)
+            2'd0: rx_sampleno <= 2'd1;
+            2'd1: rx_sampleno <= 2'd2;
+            2'd2: rx_sampleno <= 2'd0;
+        endcase
+
+    // RX strobe generator
+    reg  [1:0] rx_strobereg = 2'b00;
+    wire       rx_strobe    = (rx_strobereg == 2'b01);
+    always @(posedge clk or negedge reset)
+        if(!reset)
+            rx_strobereg <= 2'b00;
+        else
+            rx_strobereg <= {rx_strobereg[0], rx_samplerdy};
+
+    // RX state machine
+    localparam RX_IDLE  = 3'd0,
+               RX_START = 3'd1,
+               RX_DATA  = 3'd2,
+               RX_STOP  = 3'd3,
+               RX_FULL  = 3'd4,
+               RX_ERROR = 3'd5;
+    reg  [2:0] rx_state = 3'd0;
+    reg  [7:0] rx_data  = 8'b00000000;
+    reg  [2:0] rx_bitno = 3'd0;
+    always @(posedge clk or negedge reset)
+    
+        if(!reset) begin
+            $display("RX: Transition to RX_IDLE");
+            rx_sampler_reset <= 1'b0;
+            rx_state <= RX_IDLE;
+            rx_data <= 8'b00000000;
+            rx_bitno <= 3'd0;
+        end else case(rx_state)
+            RX_IDLE:
+                if(!rx_i) begin
+                    rx_sampler_reset <= 1'b1;
+                    rx_state <= RX_START;
+                    $display("RX: Transition to RX_START from idle");
+                end
+            RX_START:
+                if(rx_strobe)
+                    rx_state <= RX_DATA;
+            RX_DATA:
+                if(rx_strobe) begin
+                    if(rx_bitno == 3'd7)
+                        rx_state <= RX_STOP;
+                    rx_data <= {rx_sample1, rx_data[7:1]};
+                    rx_bitno <= rx_bitno + 3'd1;
+                end
+            RX_STOP:
+                if(rx_strobe) begin
+                    rx_sampler_reset <= 1'b0;
+                    if(rx_sample1 == 1'b0)
+                        rx_state <= RX_ERROR;
+                    else
+                        rx_state <= RX_FULL;
+                end
+            RX_FULL:
+                if(rx_ack_i)
+                    rx_state <= RX_IDLE;
+                else if(!rx_i)
+                    rx_state <= RX_ERROR;
+        endcase
+
+    assign rx_data_o  = rx_data;
+    assign rx_ready_o = (rx_state == RX_FULL);
+    assign rx_error_o = (rx_state == RX_ERROR);
+
+    // TX sampler
+    reg        tx_sampler_reset = 1'b0;
+    wire       tx_sampler_clk;
+    ClockDiv #(
+        .FREQ_I(FREQ),
+        // Make sure TX baud is exactly the same as RX baud, even after all the rounding that
+        // might have happened inside rx_sampler_clk_div, by replicating it here.
+        // Otherwise, anything that sends an octet every time it receives an octet will
+        // eventually catch a frame error.
+        .FREQ_O(FREQ / ((FREQ / (BAUD * 3) / 2) * 2) / 3),
+        .PHASE(1'b0),
+        .MAX_PPM(50_000)
+    ) tx_sampler_clk_div (
+        .reset(tx_sampler_reset),
+        .clk_i(clk),
+        .clk_o(tx_sampler_clk)
+    );
+
+    // TX strobe generator
+    reg  [1:0] tx_strobereg = 2'b00;
+    wire       tx_strobe    = (tx_strobereg == 2'b01);
+    always @(posedge clk or negedge reset)
+        if(!reset)
+            tx_strobereg <= 2'b00;
+        else
+            tx_strobereg <= {tx_strobereg[0], tx_sampler_clk};
+
+    // TX state machine
+    localparam TX_IDLE  = 3'd0,
+               TX_START = 3'd1,
+               TX_DATA  = 3'd2,
+               TX_STOP0 = 3'd3,
+               TX_STOP1 = 3'd4;
+    reg  [2:0] tx_state = 3'd0;
+    reg  [7:0] tx_data  = 8'b00000000;
+    reg  [2:0] tx_bitno = 3'd0;
+    reg        tx_buf   = 1'b1;
+    always @(posedge clk or negedge reset)
+        if(!reset) begin
+            tx_sampler_reset <= 1'b0;
+            tx_state <= 3'd0;
+            tx_data <= 8'b00000000;
+            tx_bitno <= 3'd0;
+            tx_buf <= 1'b1;
+        end else case(tx_state)
+            TX_IDLE:
+                if(tx_ready_i) begin
+                    tx_sampler_reset <= 1'b1;
+                    tx_state <= TX_START;
+                    tx_data <= tx_data_i;
+                end
+            TX_START:
+                if(tx_strobe) begin
+                    tx_state <= TX_DATA;
+                    tx_buf <= 1'b0;
+                end
+            TX_DATA:
+                if(tx_strobe) begin
+                    if(tx_bitno == 3'd7)
+                        tx_state <= TX_STOP0;
+                    tx_data <= {1'b0, tx_data[7:1]};
+                    tx_bitno <= tx_bitno + 3'd1;
+                    tx_buf <= tx_data[0];
+                end
+            TX_STOP0:
+                if(tx_strobe) begin
+                    tx_state <= TX_STOP1;
+                    tx_buf <= 1'b1;
+                end
+            TX_STOP1:
+                if(tx_strobe) begin
+                    tx_sampler_reset <= 1'b0;
+                    tx_state <= TX_IDLE;
+                end
+        endcase
+
+    assign tx_o       = tx_buf;
+    assign tx_ack_o   = (tx_state == TX_IDLE);
+
+endmodule
+
+
+
+
+module ClockDiv #(
+        parameter FREQ_I  = 2,
+        parameter FREQ_O  = 1,
+        parameter PHASE   = 1'b0,
+        parameter MAX_PPM = 1_000_000
+    ) (
+        input  reset,
+        input  clk_i,
+        output clk_o
+    );
+
+    // This calculation always rounds frequency up.
+    localparam INIT = FREQ_I / FREQ_O / 2 - 1;
+    localparam ACTUAL_FREQ_O = FREQ_I / ((INIT + 1) * 2);
+    localparam PPM = 64'd1_000_000 * (ACTUAL_FREQ_O - FREQ_O) / FREQ_O;
+    generate
+        if(INIT < 0)
+            _ERROR_FREQ_TOO_HIGH_ error();
+        if(PPM > MAX_PPM)
+            _ERROR_FREQ_DEVIATION_TOO_HIGH_ error();
+    endgenerate
+
+    reg [$clog2(INIT):0] cnt = 0;
+    reg                  clk = PHASE;
+    always @(posedge clk_i or negedge reset)
+        if(!reset) begin
+            cnt <= 0;
+            clk <= PHASE;
+        end else begin
+            if(cnt == 0) begin
+                clk <= ~clk;
+                cnt <= INIT;
+            end else begin
+                cnt <= cnt - 1;
+            end
+        end
+
+    assign clk_o = clk;
+
 endmodule
