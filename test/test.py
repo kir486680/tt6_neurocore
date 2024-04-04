@@ -22,8 +22,8 @@ async def test_project(dut):
     # Reset
     dut._log.info("Reset")
     dut.ena.value = 1
-    dut.ui_in.value = 0
-    dut.uio_in.value = 0
+    dut.ui_in.value = 1
+    dut.uio_in.value = 1
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 10)
     dut.rst_n.value = 1
@@ -65,12 +65,12 @@ async def send_byte(dut, byte):
     dut.ui_in[0].value = 0
     print("Sending start bit")
     await Timer(104, units='us')  # Delay for 1 bit time at 9600 baud
-    # Send data bits
+    #Send data bits
     for i in range(7, -1, -1):
         dut.ui_in[0].value = int(byte[i])
         print(f"Sending bit {7-i+1}: {dut.ui_in[0].value}")
         await Timer(104, units='us')  # Delay for 1 bit time at 9600 baud
-    # Send stop bit
+    #Send stop bit
     dut.ui_in[0].value = 1
     print("Sending stop bit")
     await Timer(104, units='us')  # Delay for 1 bit time at 9600 baud
