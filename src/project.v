@@ -68,7 +68,9 @@ module tt_um_example (
         // Update send_data only in the sequential block
         if (current_mul_state == START && block_multiply_done) begin
             send_data <= 1;
-        end 
+        end else if( send_state == DONE_SEND) begin
+            send_data <= 0;
+        end
     end
 end
 
@@ -344,7 +346,7 @@ always @(posedge clk) begin
             DONE_SEND: begin
                 tx_data <= 8'b11111111;
                 send_state <= IDLE_SEND;
-                send_data <= 0;
+              
             end
         endcase
 
