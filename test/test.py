@@ -55,10 +55,9 @@ async def test_project(dut):
             await ClockCycles(dut.clk, 1)
     
     await send_byte(dut, '11111111')
-    dut.ui_in[1].value = 1
     print("Sent all float16 values")
-    print("uo_out:", dut.uo_out.value)
-    await Timer(100000, units='us')
+    print("uo_out:", dut.uio_out.value)
+    await Timer(50000, units='us')
 
 
 async def send_byte(dut, byte):
@@ -84,9 +83,9 @@ async def monitor_tx(dut):
         data = ""
         for _ in range(8):
             await Timer(104, units='us')  # Wait for 1 bit time at 9600 baud
-            data = str(dut.uo_out[1].value.integer) + data
-            print(f"Received bit: {dut.uo_out[1].value.integer}")
+            data = str(dut.uo_out[0].value.integer) + data
+            print(f"Received bit: {dut.uo_out[0].value.integer}")
         await Timer(104, units='us')  # Wait for stop bit
-        stop_bit = dut.uo_out[1].value.integer
+        stop_bit = dut.uo_out[0].value.integer
         print(f"Received stop bit: {stop_bit}")
         dut._log.info(f"Received byte from TX: {data}")

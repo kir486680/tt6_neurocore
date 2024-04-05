@@ -21,6 +21,11 @@ module tt_um_example (
   reg start;
   reg load;
   wire block_multiply_done;
+  
+  //logging
+  assign uio_out[0] = block_multiply_done;
+  assign uio_out[1] = start;
+
   //reg [`DATA_W-1:0] block_a1, block_a2, block_a3, block_a4, block_b1, block_b2, block_b3, block_b4;
   reg [`DATA_W-1:0] block_a1, block_a2, block_a3, block_a4, block_b1, block_b2, block_b3, block_b4;
   reg [`DATA_W-1:0] block_result1, block_result2, block_result3, block_result4;
@@ -112,7 +117,7 @@ wire [7:0] rx_data;
 reg [7:0] tx_data;
 wire rx_ready;
 wire rx_ack;
-// assign uo_out[0] = block_multiply_done;
+
 wire       tx_ready;
 wire       tx_ack;
 UART #(
@@ -126,7 +131,7 @@ UART #(
     .rx_ready_o(rx_ready),
     .rx_ack_i(rx_ack),
     .rx_error_o(rx_error),
-    .tx_o(uo_out[1]),
+    .tx_o(uo_out[0]),
     .tx_data_i(tx_data),
     .tx_ready_i(tx_ready),
     .tx_ack_o(tx_ack)
@@ -168,7 +173,6 @@ always @(posedge clk) begin
             if (rx_data == 8'b11111110) begin
                 data_processed <= 1'b1;
                 state_receive <= RECEIVE_BR1_HIGH;
-                $display("received the start seq");
             end
         end
         RECEIVE_BR1_HIGH: begin
@@ -285,6 +289,9 @@ SEND_BR4_HIGH = 7, SEND_BR4_LOW = 8, DONE_SEND = 9;
 
 reg [3:0] send_state = IDLE_SEND;
 
+//logging 
+assign uio_out[5:2] = send_state;
+
 
 always @(posedge clk) begin
     if(!rst_n) begin
@@ -301,10 +308,8 @@ always @(posedge clk) begin
             IDLE_SEND: begin
                 tx_data <= 8'b11111110;
                 send_state <= SEND_BR1_HIGH;
-                $display("sending the start seq");
             end
             SEND_BR1_HIGH: begin
-                $display("sending block 1");
                 tx_data <= block_result1[15:8];
                 send_state <= SEND_BR1_LOW;
             end
@@ -339,7 +344,6 @@ always @(posedge clk) begin
             DONE_SEND: begin
                 tx_data <= 8'b11111111;
                 send_state <= IDLE_SEND;
-                $display("sent the end seq");
                 send_data <= 0;
             end
         endcase
@@ -357,8 +361,8 @@ assign tx_ready = data_available; // Only ready when new data is loaded
 
 
   // Keep other assignments as is
-  assign uo_out[7:2] = 0;
-  assign uio_out = 0;
+  assign uo_out[7:1] = 0;
+  assign uio_out[7:6] = 0;
   assign uio_oe  = 0;
 
 endmodule
@@ -838,7 +842,6 @@ module UART #(
     always @(posedge clk or negedge reset)
     
         if(!reset) begin
-            $display("RX: Transition to RX_IDLE");
             rx_sampler_reset <= 1'b0;
             rx_state <= RX_IDLE;
             rx_data <= 8'b00000000;
@@ -848,7 +851,6 @@ module UART #(
                 if(!rx_i) begin //when RX line pulled low, start receiving
                     rx_sampler_reset <= 1'b1;
                     rx_state <= RX_START;
-                    $display("RX: Transition to RX_START from idle");
                 end
             RX_START:
                 if(rx_strobe)
@@ -934,12 +936,10 @@ module UART #(
                 if(tx_strobe) begin
                     tx_state <= TX_DATA;
                     tx_buf <= 1'b0; //start bit is 0
-                    $display("TX: Transition to TX_DATA");
                 end
             TX_DATA:
                 if(tx_strobe) begin
                     if(tx_bitno == 3'd7)begin
-                        $display("TX: Transition to TX_STOP0");
                         tx_state <= TX_STOP0;
                     end
                     tx_data <= {1'b0, tx_data[7:1]};
@@ -951,13 +951,11 @@ module UART #(
                 if(tx_strobe) begin
                     tx_state <= TX_STOP1;
                     tx_buf <= 1'b1;
-                    $display("TX: Transition to TX_STOP1");
                 end
             TX_STOP1:
                 if(tx_strobe) begin
                     tx_sampler_reset <= 1'b0;
                     tx_state <= TX_IDLE;
-                    $display("TX: Transition to TX_IDLE");
                 end
         endcase
 
