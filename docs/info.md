@@ -28,14 +28,11 @@ Your "How to Test" section outlines a clear testing protocol for your systolic a
     - Since you are multiplying 2x2 matrices, you must send a total of 8 float16 numbers, equating to 16 data frames of 8 bits each.
     - For clarity, send the matrix elements in row-major order. For example, if your matrices are A and B, with elements `a11, a12, a21, a22` for A and similarly for B, send them in the order `a11, a12, a21, a22, b11, b12, b21, b22`.
 
-3. **Termination Sequence**: After transmitting all matrix data, send the termination sequence `11111111` to signal the end of your data transmission. This tells the device that it should start processing the transmitted data and prepare to send back the result.
-
-4. **Receiving the Result**:
+3. **Receiving the Result**:
     - Upon completion of the data processing, the device will first send back an acknowledgment sequence `11111110`, indicating that the multiplication process is complete and the device is about to send the result.
     - Following this, expect to receive the result of the matrix multiplication in a similar format to the input. The device will send 4 float16 numbers (representing the resulting matrix elements) as 8-bit frames (high byte first), which you will need to interpret accordingly.
-    - Lastly, you will also receive `11111111` which means that communication has ended. 
 
-5. **Interpreting the Results**:
+4. **Interpreting the Results**:
     - Collect the 8-bit frames received from the device and reconstruct them into float16 numbers to obtain the resulting matrix elements.
     - These elements represent the resultant matrix from the multiplication of the two input matrices.
 

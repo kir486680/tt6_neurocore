@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2024 Your Name
+ * Copyright (c) 2024 Kyrylo Kalashnikov
  * SPDX-License-Identifier: Apache-2.0
  */
 
 `define default_netname none
  `include "define.v"
-module tt_um_example (
+module tt_um_neurocore (
     input  wire [7:0] ui_in,    // Dedicated inputs
     output reg [7:0] uo_out,   // Dedicated outputs - Changed to 'reg' to allow procedural assignments
     input  wire [7:0] uio_in,   // IOs: Input path
@@ -17,7 +17,7 @@ module tt_um_example (
 );
 
 
-      // Parameters for the systolic array
+  // Parameters for the systolic array
   reg start;
   reg load;
   wire block_multiply_done;
@@ -61,14 +61,12 @@ module tt_um_example (
     if (!rst_n) begin
         current_mul_state <= IDLE_MUL;
         send_data <= 0;
-           
-
     end else begin
         current_mul_state <= next_mul_state;
         // Update send_data only in the sequential block
-        if (current_mul_state == START && block_multiply_done) begin
+        if (current_mul_state == DONE_MUL && done_send != 1) begin
             send_data <= 1;
-        end else if( send_state == DONE_SEND) begin
+        end else begin
             send_data <= 0;
         end
     end
@@ -83,7 +81,7 @@ always @(*) begin
   
   case (current_mul_state)
       IDLE_MUL: begin
-          if (state_receive == DONE_RECEIVE) begin
+          if (done_receive == 1'b1) begin
               next_mul_state = LOAD;
           end else begin
               next_mul_state = IDLE_MUL;
@@ -102,11 +100,10 @@ always @(*) begin
           end else begin
               next_mul_state = START;
           end
-          // Other START state logic
       end
       DONE_MUL: begin
           // DONE_MUL state logic
-          next_mul_state = IDLE_MUL;
+        next_mul_state = IDLE_MUL;
       end
       default: next_mul_state = IDLE_MUL;
   endcase
@@ -150,8 +147,8 @@ RECEIVE_BR4_HIGH = 7, RECEIVE_BR4_LOW = 8,
 RECEIVE_BR5_HIGH = 9, RECEIVE_BR5_LOW = 10,
 RECEIVE_BR6_HIGH = 11, RECEIVE_BR6_LOW = 12,
 RECEIVE_BR7_HIGH = 13, RECEIVE_BR7_LOW = 14,
-RECEIVE_BR8_HIGH = 15, RECEIVE_BR8_LOW = 16,
-DONE_RECEIVE = 17;
+RECEIVE_BR8_HIGH = 15, RECEIVE_BR8_LOW = 16;
+reg done_receive;
 //now need to keep track of the state of the data that is being received
 reg [5:0] state_receive = IDLE;
 
@@ -161,6 +158,7 @@ always @(posedge clk) begin
         data_processed <= 1'b0;
         received_data <= 8'h00;
         state_receive <= IDLE;
+        done_receive <= 1'b0;
 
     end
     else begin
@@ -168,11 +166,12 @@ always @(posedge clk) begin
         // New data is available and not yet processed
         received_data <= rx_data; // Store the incoming data
         data_received <= 1'b1;    // Set flag to indicate data is ready to be processed
-    // state machine to receive the data
+        // state machine to receive the data
         case (state_receive)
         IDLE: begin
             
             if (rx_data == 8'b11111110) begin
+                done_receive <= 1'b0;
                 data_processed <= 1'b1;
                 state_receive <= RECEIVE_BR1_HIGH;
             end
@@ -255,16 +254,10 @@ always @(posedge clk) begin
         RECEIVE_BR8_LOW: begin
             block_b4[7:0] <= rx_data;
             data_processed <= 1'b1;
-            state_receive <= DONE_RECEIVE;
-            
-        end
-        DONE_RECEIVE: begin
-       
-            if (rx_data == 8'b11111111) begin
-                state_receive <= IDLE;
-                data_processed <= 1'b1;
-                $display("received the end seq");
-            end
+            state_receive <= IDLE;
+            done_receive <= 1'b1;
+            done_send <= 1'b0;
+            $display("received the end seq");
         end
         default: state_receive <= IDLE;
     endcase
@@ -287,66 +280,82 @@ reg data_available;
 localparam IDLE_SEND = 0, SEND_BR1_HIGH = 1, SEND_BR1_LOW = 2, 
 SEND_BR2_HIGH = 3, SEND_BR2_LOW = 4, 
 SEND_BR3_HIGH = 5, SEND_BR3_LOW = 6,
-SEND_BR4_HIGH = 7, SEND_BR4_LOW = 8, DONE_SEND = 9;
+SEND_BR4_HIGH = 7, SEND_BR4_LOW = 8;
+
+reg done_send;
 
 reg [3:0] send_state = IDLE_SEND;
 
 //logging 
 assign uio_out[5:2] = send_state;
+assign uio_out[6] = done_send;
+assign uio_out[7] = send_data;
 
 
 always @(posedge clk) begin
     if(!rst_n) begin
         data_available <= 1'b0;
         send_state <= IDLE_SEND;
+        done_send <= 1'b0;
     end
     else begin
-    if(send_data) begin
-    if (!data_available && tx_ack && received_data == 8'b11111111) begin
+    
+    if (!data_available && tx_ack) begin
         // Load new data to send
-        data_available <= 1'b1;
+        
         
         case (send_state)
             IDLE_SEND: begin
+              
+              if(send_data) begin
+                
+                $display("sending starting seq");
+                data_available <= 1'b1;
                 tx_data <= 8'b11111110;
                 send_state <= SEND_BR1_HIGH;
+              end 
             end
             SEND_BR1_HIGH: begin
+                data_available <= 1'b1;
                 tx_data <= block_result1[15:8];
                 send_state <= SEND_BR1_LOW;
             end
             SEND_BR1_LOW: begin
+                data_available <= 1'b1;
                 tx_data <= block_result1[7:0];
                 send_state <= SEND_BR2_HIGH;
             end
             SEND_BR2_HIGH: begin
+              data_available <= 1'b1;
                 tx_data <= block_result2[15:8];
                 send_state <= SEND_BR2_LOW;
             end
             SEND_BR2_LOW: begin
+              data_available <= 1'b1;
                 tx_data <= block_result2[7:0];
                 send_state <= SEND_BR3_HIGH;
             end
             SEND_BR3_HIGH: begin
+              data_available <= 1'b1;
                 tx_data <= block_result3[15:8];
                 send_state <= SEND_BR3_LOW;
             end
             SEND_BR3_LOW: begin
+              data_available <= 1'b1;
                 tx_data <= block_result3[7:0];
                 send_state <= SEND_BR4_HIGH;
             end
             SEND_BR4_HIGH: begin
+              data_available <= 1'b1;
                 tx_data <= block_result4[15:8];
                 send_state <= SEND_BR4_LOW;
             end
             SEND_BR4_LOW: begin
+              data_available <= 1'b1;
                 tx_data <= block_result4[7:0];
-                send_state <= DONE_SEND;
-            end
-            DONE_SEND: begin
-                tx_data <= 8'b11111111;
                 send_state <= IDLE_SEND;
-              
+                done_send <= 1'b1;
+                $display("done sending");
             end
         endcase
 
@@ -356,7 +365,7 @@ always @(posedge clk) begin
     end
 end
 end
-end
+
 
 assign tx_ready = data_available; // Only ready when new data is loaded
 
@@ -364,7 +373,6 @@ assign tx_ready = data_available; // Only ready when new data is loaded
 
   // Keep other assignments as is
   assign uo_out[7:1] = 0;
-  assign uio_out[7:6] = 0;
   assign uio_oe  = 0;
 
 endmodule
