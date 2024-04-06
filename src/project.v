@@ -256,7 +256,6 @@ always @(posedge clk) begin
             data_processed <= 1'b1;
             state_receive <= IDLE;
             done_receive <= 1'b1;
-            done_send <= 1'b0;
             $display("received the end seq");
         end
         default: state_receive <= IDLE;
@@ -300,15 +299,15 @@ always @(posedge clk) begin
     end
     else begin
     
+    if (state_receive == RECEIVE_BR8_LOW) begin 
+        done_send <= 1'b0;
+    end 
+
     if (!data_available && tx_ack) begin
         // Load new data to send
-        
-        
         case (send_state)
             IDLE_SEND: begin
-              
               if(send_data) begin
-                
                 $display("sending starting seq");
                 data_available <= 1'b1;
                 tx_data <= 8'b11111110;
