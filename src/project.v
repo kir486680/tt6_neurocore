@@ -654,7 +654,7 @@ assign exponent_b_add = operand_b[16-2:`M_W] + exponent_diff;
 //------------------------------------------------ADD BLOCK------------------------------------------//
 //if we are adding(operation_sub_addBar=1) need to add significand_b_add to significand_a. 
 //Or sets the significand to zero if the signs are different(this means we are doing subtraction), effectively determining the core operation of the floating-point addition based on the sign of the operands.
-assign significand_add = ( operation_sub_addBar) ? (significand_a + significand_b_add) : {(`M_W+2){1'b0}}; 
+assign significand_add = ( operation_sub_addBar) ? (significand_a + significand_b_add) : (significand_a - significand_b_add);
 
 //Taking care of the resulting mantissa. 
 //If there is a carry, then the result is normalized by shifting the significand right by one bit(because its implied) and incrementing the exponent by one.
